@@ -15,3 +15,7 @@ All tests are pure Node ESM (`node:test` + `node:assert/strict`); no network, no
 - Machine-specific absolute paths (use `<profile>`, `<dsh-home>`, `<repository-root>`)
 
 The plugin's own config is stored in the user's DSH profile, never in this repository.
+
+## Branches
+
+The default branch is `main`. Push changes directly to `main`; no feature branches are required for small fixes.
