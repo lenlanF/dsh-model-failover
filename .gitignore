@@ -15,3 +15,6 @@ workbuddy-vault/
 *.log
 .DS_Store
 Thumbs.db
+
+# Local credential file (never commit)
+github_token
