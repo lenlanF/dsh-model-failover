@@ -1,0 +1,17 @@
+# Never commit credentials, local profiles, or machine state.
+node_modules/
+.git-credentials
+.env
+.env.*
+*.token
+*.key
+*.pem
+id_rsa*
+id_ed25519*
+.dsh/
+profiles/
+workbuddy-vault/
+.credentials.yaml
+*.log
+.DS_Store
+Thumbs.db

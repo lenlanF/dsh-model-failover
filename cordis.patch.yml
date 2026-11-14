@@ -1,0 +1,5 @@
+# dsh-model-failover: host-side listener on agent/request-error.
+# Mirrors dsh-connect-workbuddy/cordis.patch.yml:4-6 in this profile.
+- insert:
+    - id: dsh-model-failover
+      name: dsh-model-failover

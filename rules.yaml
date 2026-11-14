@@ -1,0 +1,27 @@
+# dsh-model-failover / 纯 YAML 规则模板（与设置页 Config 字段一一对应）
+# 主操作界面是 Settings -> dsh-model-failover 设置页；本文件仅作离线模板 / 备份。
+# 手写本文件不会自动生效：需把值同步到 <profile>/cordis.patch.yml 的 config: 覆盖条目，
+# 或直接在设置页编辑（settings.mutate -> HMR 即时生效）。字段名/默认值见 README.md。
+# 全部字段均为 Config schema 的 .volatile() 可编辑字段（lib/index.js:32-46）。
+enabled: true
+# 唯一有序故障转移链：设置页勾选并排序的结果；未勾选的模型永远不会被使用。
+priority:
+  - provider: workbuddy
+    model: hy4free
+  - provider: workbuddy
+    model: hy3
+  - provider: workbuddy
+    model: hy4std
+# 7 个默认触发码；另可加 HTTP_500..HTTP_599，或依赖数值 status >= 500。
+triggers:
+  - QUOTA
+  - ACCOUNT_QUOTA
+  - RATE_LIMIT
+  - SERVER
+  - TIMEOUT
+  - TRANSPORT
+  - STREAM_CLOSED
+maxSwitchesPerSession: 3
+cooldownMs: 0
+switchLogLimit: 20
+switchLog: []

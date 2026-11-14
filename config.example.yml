@@ -1,0 +1,26 @@
+# 追加到 <profile>/cordis.patch.yml 顶层补丁数组的一条 id-targeted config 覆盖条目。
+# 不要塞进 "- insert:" 列表；insert 条目见包内 cordis.patch.yml。
+# 新版本主路径是设置页：settings.mutate 会自动写本条目并触发 HMR，无需手写。
+- id: dsh-model-failover
+  name: dsh-model-failover
+  config:
+    enabled: true
+    priority:
+      - provider: workbuddy
+        model: hy4free
+      - provider: workbuddy
+        model: hy3
+      - provider: workbuddy
+        model: hy4std
+    triggers:
+      - QUOTA
+      - ACCOUNT_QUOTA
+      - RATE_LIMIT
+      - SERVER
+      - TIMEOUT
+      - TRANSPORT
+      - STREAM_CLOSED
+    maxSwitchesPerSession: 3
+    cooldownMs: 0
+    switchLogLimit: 20
+    switchLog: []
