@@ -38,7 +38,7 @@ const ALL_TRIGGERS = Object.freeze([
   'QUOTA', 'ACCOUNT_QUOTA', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT', 'STREAM_CLOSED',
 ]);
 const CROSS_PRIORITY = Object.freeze([
-  'workbuddy/hy4free',
+  'workbuddy/hy4flash-free',
   'workbuddy/hy3',
   'workbuddy/hy4std',
   'deepseek-official/deepseek-flash',
@@ -275,7 +275,7 @@ test('management rules: defaults expose a switch cap >= 1 and cooldownMs 0', (t)
   if (!cap || !cooldown) {
     gap(t, 'normalizeRules defaults', 'normalizeRules() exposes no maxSwitchesPerSession / cooldownMs fields; closest observable: the existing frozen priority/triggers defaults still hold, including when the new config keys are supplied');
     assert.deepEqual(normalized.priority.map((s) => s.provider + '/' + s.model), [
-      'workbuddy/hy4free', 'workbuddy/hy3', 'workbuddy/hy4std',
+      'workbuddy/hy4flash-free', 'workbuddy/hy3', 'workbuddy/hy4std',
     ]);
     assert.deepEqual([...normalized.triggers], [...ALL_TRIGGERS]);
     assert.equal(normalized.enabled, true);
@@ -319,14 +319,14 @@ test('management rules: negative/invalid cap and cooldown values clamp; positive
 test('management rules: priority entries from multiple providers are preserved in order', () => {
   const config = {
     priority: [
-      { provider: 'workbuddy', model: 'hy4free' },
+      { provider: 'workbuddy', model: 'hy4flash-free' },
       'deepseek-official/deepseek-flash',
       { provider: 'anthropic', model: 'claude-x', reasoningEffort: 'high' },
     ],
   };
   const normalized = rules.normalizeRules(config);
   assert.deepEqual(normalized.priority.map((s) => ({ ...s })), [
-    { provider: 'workbuddy', model: 'hy4free' },
+    { provider: 'workbuddy', model: 'hy4flash-free' },
     { provider: 'deepseek-official', model: 'deepseek-flash' },
     { provider: 'anthropic', model: 'claude-x', reasoningEffort: 'high' },
   ]);
@@ -339,8 +339,8 @@ test('management rules: priority entries from multiple providers are preserved i
 test('management rules: duplicate provider/model pairs are deduplicated, rejected, or preserved as implemented', (t) => {
   const config = {
     priority: [
-      'workbuddy/hy4free',
-      { provider: ' workbuddy ', model: ' hy4free ' },
+      'workbuddy/hy4flash-free',
+      { provider: ' workbuddy ', model: ' hy4flash-free ' },
       'deepseek-official/deepseek-flash',
       'deepseek-official/deepseek-flash',
     ],
@@ -353,7 +353,7 @@ test('management rules: duplicate provider/model pairs are deduplicated, rejecte
     // entry through normalizeSelection with no duplicate filtering.
     gap(t, 'priority duplicates', 'normalizeRules preserves duplicate provider/model pairs in order; the contract asks for deduplication or rejection');
     assert.deepEqual(keys, [
-      'workbuddy/hy4free', 'workbuddy/hy4free',
+      'workbuddy/hy4flash-free', 'workbuddy/hy4flash-free',
       'deepseek-official/deepseek-flash', 'deepseek-official/deepseek-flash',
     ]);
     assert.deepEqual({ ...rules.nextSelection(normalized.priority[0], normalized) },
@@ -361,7 +361,7 @@ test('management rules: duplicate provider/model pairs are deduplicated, rejecte
     return;
   }
   assert.equal(unique.length, keys.length, 'duplicate provider/model pairs must be deduplicated or rejected');
-  assert.deepEqual(keys, ['workbuddy/hy4free', 'deepseek-official/deepseek-flash'],
+  assert.deepEqual(keys, ['workbuddy/hy4flash-free', 'deepseek-official/deepseek-flash'],
     'first-occurrence order across providers must survive deduplication');
 });
 
@@ -497,8 +497,8 @@ test('management cooldown: after the cooldown elapses the next qualifying failur
 // ---------------------------------------------------------------------------
 
 test('management cross-provider: a workbuddy failure selects deepseek-official/deepseek-flash', async () => {
-  const config = baseConfig({ priority: ['workbuddy/hy4free', 'deepseek-official/deepseek-flash'] });
-  const s = setup({ config, agentOptions: { selection: { provider: 'workbuddy', model: 'hy4free' } } });
+  const config = baseConfig({ priority: ['workbuddy/hy4flash-free', 'deepseek-official/deepseek-flash'] });
+  const s = setup({ config, agentOptions: { selection: { provider: 'workbuddy', model: 'hy4flash-free' } } });
   const result = await fail(s.ctx, s.handle, s.agent, 'QUOTA');
   assert.equal(result.selects, 1);
   assert.equal(result.followups, 1);
@@ -508,13 +508,13 @@ test('management cross-provider: a workbuddy failure selects deepseek-official/d
 });
 
 test('management cross-provider: the failover summary and log name both providers', async () => {
-  const config = baseConfig({ priority: ['workbuddy/hy4free', 'deepseek-official/deepseek-flash'] });
-  const from = { provider: 'workbuddy', model: 'hy4free' };
+  const config = baseConfig({ priority: ['workbuddy/hy4flash-free', 'deepseek-official/deepseek-flash'] });
+  const from = { provider: 'workbuddy', model: 'hy4flash-free' };
   const to = { provider: 'deepseek-official', model: 'deepseek-flash' };
   const normalized = rules.normalizeRules(config);
   assert.deepEqual({ ...rules.nextSelection(from, normalized) }, to);
   const summary = rules.failoverSummary(from, to, 'QUOTA');
-  assert.ok(summary.includes('workbuddy/hy4free'), 'summary must name the failing provider/model');
+  assert.ok(summary.includes('workbuddy/hy4flash-free'), 'summary must name the failing provider/model');
   assert.ok(summary.includes('deepseek-official/deepseek-flash'), 'summary must name the target provider/model');
   assert.ok(summary.length <= 120, 'summary must stay bounded');
 
@@ -546,7 +546,7 @@ test('management switchLog: each switch appends a bounded from/to/code/time reco
     gap(t, 'switchLog records', 'neither appendSwitchLog nor persisted switchLog records exist; closest observable: exactly one bounded [failover] trace line per switch carrying from/to/code');
     const lines = s.ctx.logs.filter((entry) => typeof entry.text === 'string' && entry.text.includes('[failover]'));
     assert.equal(lines.length, 2, 'one trace line per successful switch');
-    assert.ok(lines[0].text.includes('workbuddy/hy4free -> workbuddy/hy3'));
+    assert.ok(lines[0].text.includes('workbuddy/hy4flash-free -> workbuddy/hy3'));
     assert.ok(lines[1].text.includes('workbuddy/hy3 -> workbuddy/hy4std'));
     for (const line of lines) {
       assert.ok(line.text.length <= 300, 'trace line must be bounded');
@@ -559,12 +559,12 @@ test('management switchLog: each switch appends a bounded from/to/code/time reco
   if (helper !== undefined) {
     const appended = helper([], {
       at: 1700000000000, code: 'QUOTA',
-      from: { provider: 'workbuddy', model: 'hy4free' },
+      from: { provider: 'workbuddy', model: 'hy4flash-free' },
       to: { provider: 'workbuddy', model: 'hy3' }, reason: 'auto',
     }, 20);
     assert.equal(appended.length, 1, 'one append produces one record');
     const row = appended[0];
-    assert.equal(row.from, 'workbuddy/hy4free', 'record must carry from');
+    assert.equal(row.from, 'workbuddy/hy4flash-free', 'record must carry from');
     assert.equal(row.to, 'workbuddy/hy3', 'record must carry to');
     assert.equal(row.code, 'QUOTA', 'record must carry the failure code');
     assert.equal(row.at, 1700000000000, 'record must carry a time');
@@ -655,8 +655,8 @@ test('management switchLog: overflow keeps only the newest N records', async (t)
 // ---------------------------------------------------------------------------
 
 test('management restore: selecting the first priority entry leaves the global default untouched', async (t) => {
-  const config = baseConfig({ priority: ['workbuddy/hy4free', 'workbuddy/hy3', 'deepseek-official/deepseek-flash'] });
-  const first = { provider: 'workbuddy', model: 'hy4free' };
+  const config = baseConfig({ priority: ['workbuddy/hy4flash-free', 'workbuddy/hy3', 'deepseek-official/deepseek-flash'] });
+  const first = { provider: 'workbuddy', model: 'hy4flash-free' };
   const s = setup({ config });
   assert.equal((await fail(s.ctx, s.handle, s.agent, 'QUOTA')).selects, 1);
   assert.equal(s.agent.model.current().model, 'hy3', 'a switch must have moved off the first entry');

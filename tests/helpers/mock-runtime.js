@@ -3,7 +3,7 @@
 // listener receives (payload, next), exactly as the DSH 0.2.2-rc.3 host does.
 
 export const DEFAULT_PRIORITY = Object.freeze([
-  Object.freeze({ provider: 'workbuddy', model: 'hy4free' }),
+  Object.freeze({ provider: 'workbuddy', model: 'hy4flash-free' }),
   Object.freeze({ provider: 'workbuddy', model: 'hy3' }),
   Object.freeze({ provider: 'workbuddy', model: 'hy4std' }),
 ]);

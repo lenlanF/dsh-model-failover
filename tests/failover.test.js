@@ -41,11 +41,20 @@ before(async () => {
   ]);
 });
 
+// The plugin ships no built-in chain: the chain is the user's. Tests therefore
+// supply their own ladder explicitly instead of relying on a product default.
+const TEST_CHAIN = Object.freeze([
+  { provider: 'workbuddy', model: 'hy4flash-free' },
+  { provider: 'workbuddy', model: 'hy3' },
+  { provider: 'workbuddy', model: 'hy4std' },
+]);
+
 function setup(options = {}) {
   const agent = options.agent ?? createMockAgent(options.agentOptions ?? {});
   const ctx = createMockContext({ agents: [agent] });
   const internals = { createUserMessage };
-  const handle = plugin.apply(ctx, options.config ?? {}, internals);
+  const config = { priority: TEST_CHAIN.map((item) => ({ ...item })), ...(options.config ?? {}) };
+  const handle = plugin.apply(ctx, config, internals);
   return { agent, ctx, handle };
 }
 
@@ -124,12 +133,12 @@ test('classification: non-retryable codes never qualify', () => {
   assert.equal(rules.qualifies(makeFailure('QUOTA'), rules.normalizeRules({ enabled: false })), false);
 });
 
-test('classification: default priority is frozen and ordered hy4free -> hy3 -> hy4std', () => {
-  assert.deepEqual(rules.DEFAULT_PRIORITY.map((s) => s.provider + '/' + s.model), [
-    'workbuddy/hy4free', 'workbuddy/hy3', 'workbuddy/hy4std',
-  ]);
+test('classification: the plugin ships no default chain of its own', () => {
+  // The chain belongs to the user. A built-in ladder would silently substitute
+  // models this plugin guessed at, and a guessed model can be missing or metered.
+  assert.deepEqual(rules.DEFAULT_PRIORITY.map((s) => s.provider + '/' + s.model), []);
   assert.ok(Object.isFrozen(rules.DEFAULT_PRIORITY));
-  assert.deepEqual(MOCK_PRIORITY.map((s) => ({ ...s })), rules.DEFAULT_PRIORITY.map((s) => ({ ...s })));
+  assert.deepEqual(rules.normalizeRules({}).priority, [], 'no configured chain means no failover');
 });
 
 test('classification: normalizeRules validates custom rules and drops invalid entries', () => {
@@ -145,30 +154,31 @@ test('classification: normalizeRules validates custom rules and drops invalid en
   assert.equal(rules.qualifies(makeFailure('SERVER'), custom), false,
     'a custom trigger list must not inherit built-in trigger codes');
   assert.equal(rules.qualifies(makeFailure('QUOTA'), custom), true);
-  assert.equal(rules.normalizeRules({ priority: [] }).priority.length, 3);
+  assert.equal(rules.normalizeRules({ priority: [] }).priority.length, 0,
+    'an explicitly empty chain must stay empty rather than fall back to defaults');
 });
 
 test('classification: nextSelection walks the ladder and stops at the end', () => {
-  const r = rules.normalizeRules();
-  assert.deepEqual({ ...rules.nextSelection({ provider: 'workbuddy', model: 'hy4free' }, r) },
+  const r = rules.normalizeRules({ priority: TEST_CHAIN.map((item) => ({ ...item })) });
+  assert.deepEqual({ ...rules.nextSelection({ provider: 'workbuddy', model: 'hy4flash-free' }, r) },
     { provider: 'workbuddy', model: 'hy3' });
   assert.deepEqual({ ...rules.nextSelection({ provider: 'workbuddy', model: 'hy3' }, r) },
     { provider: 'workbuddy', model: 'hy4std' });
   assert.equal(rules.nextSelection({ provider: 'workbuddy', model: 'hy4std' }, r), undefined);
-  assert.deepEqual({ ...rules.nextSelection(undefined, r) }, { provider: 'workbuddy', model: 'hy4free' });
+  assert.deepEqual({ ...rules.nextSelection(undefined, r) }, { provider: 'workbuddy', model: 'hy4flash-free' });
   assert.deepEqual({ ...rules.nextSelection({ provider: 'other', model: 'x' }, r) },
-    { provider: 'workbuddy', model: 'hy4free' });
+    { provider: 'workbuddy', model: 'hy4flash-free' });
   assert.equal(rules.sameSelection({ provider: 'a', model: 'b' }, { provider: 'a', model: 'b', extra: 1 }), true);
   assert.equal(rules.sameSelection({ provider: 'a', model: 'b' }, { provider: 'a', model: 'c' }), false);
 });
 
 test('classification: failoverSummary is bounded, prefixed and names both routes', () => {
   const summary = rules.failoverSummary(
-    { provider: 'workbuddy', model: 'hy4free' },
+    { provider: 'workbuddy', model: 'hy4flash-free' },
     { provider: 'workbuddy', model: 'hy3' },
     'QUOTA',
   );
-  assert.match(summary, /^\[failover\] QUOTA: workbuddy\/hy4free -> workbuddy\/hy3/);
+  assert.match(summary, /^\[failover\] QUOTA: workbuddy\/hy4flash-free -> workbuddy\/hy3/);
   assert.ok(summary.length <= 120, 'summary length ' + summary.length + ' exceeds 120');
   const long = rules.failoverSummary(undefined, { provider: 'p'.repeat(200), model: 'm'.repeat(200) }, 'X'.repeat(200));
   assert.ok(long.length <= 120);
@@ -267,7 +277,7 @@ test('waterfall: aborted signal and disabled config record no intent', async () 
 // (2) Ordered degradation and exhaustion
 // ---------------------------------------------------------------------------
 
-test('degradation: hy4free -> hy3 -> hy4std across consecutive terminal failures', async () => {
+test('degradation: hy4flash-free -> hy3 -> hy4std across consecutive terminal failures', async () => {
   const { agent, ctx, handle } = setup();
   const failure = makeFailure('QUOTA');
 
@@ -287,7 +297,7 @@ test('degradation: hy4free -> hy3 -> hy4std across consecutive terminal failures
   // The host appends its own durable model-switch notice at the next pre-step;
   // the plugin must not append a duplicate session event. Its trace is a log line.
   assert.equal(agent.notices.length, 0);
-  assert.ok(ctx.logs.some((entry) => entry.level === 'info' && entry.text.includes('[failover] QUOTA: workbuddy/hy4free -> workbuddy/hy3')),
+  assert.ok(ctx.logs.some((entry) => entry.level === 'info' && entry.text.includes('[failover] QUOTA: workbuddy/hy4flash-free -> workbuddy/hy3')),
     'a bounded [failover] log line records the switch');
   for (const message of agent.followups) {
     assert.deepEqual(message.content, [], 'empty retry content is deliberate');
@@ -327,9 +337,9 @@ test('degradation: the selected model stays until a manual change (no auto rollb
   await trigger(ctx, handle, agent, 'agent/status', { agent, status: 'idle' });
   assert.equal(agent.model.current().model, 'hy3', 'idle alone must not roll back or re-switch');
 
-  agent.model.select({ provider: 'workbuddy', model: 'hy4free' });
+  agent.model.select({ provider: 'workbuddy', model: 'hy4flash-free' });
   await trigger(ctx, handle, agent, 'agent/status', { agent, status: 'idle' });
-  assert.equal(agent.model.current().model, 'hy4free', 'manual selection must be respected');
+  assert.equal(agent.model.current().model, 'hy4flash-free', 'manual selection must be respected');
   assert.equal(ctx.globalDefaultSaves.length, 0);
 });
 
