@@ -68,3 +68,19 @@ test('settings that cannot be read leave the passed config intact', () => {
   const handle = apply(ctx, { priority: [{ provider: 'p', model: 'kept' }] });
   assert.deepEqual(handle.rules.priority.map((x) => x.model), ['kept']);
 });
+
+test('the saved chain is adopted once the entry goes live', () => {
+  // describe() reports only active entries, so a read during apply() misses this
+  // plugin's own row. The chain must still arrive once settings is injected.
+  let live = false;
+  const rows = () => (live ? [{ ns: 'dsh-model-failover', value: { priority: SAVED_CHAIN } }] : []);
+  const ctx = {
+    on: () => () => {},
+    effect: (fn) => { try { fn(); } catch { /* optional */ } },
+    inject: (deps, cb) => { live = true; cb({ settings: { configure: () => {} } }); },
+    fiber: { entry: { options: { id: 'dsh-model-failover' } } },
+    get: (name) => (name === 'settings' ? { describe: rows, mutate: async () => {}, configure: () => {} } : undefined),
+  };
+  const handle = apply(ctx, {});
+  assert.equal(handle.rules.priority.length, 3, 'the live entry must adopt the saved chain');
+});
