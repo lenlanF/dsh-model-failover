@@ -1,6 +1,6 @@
 {
   "name": "dsh-model-failover",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Automatically degrade to the next configured model on quota, upstream or transport errors and continue the session.",
   "license": "MIT",
   "type": "module",

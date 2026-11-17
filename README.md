@@ -1,5 +1,15 @@
 # dsh-model-failover
 
+## v0.2.1 — 故障切换与配置安全修复（2026-11-17）
+
+- 保存的 `mode`、耗尽路由与冷却参数随链恢复；局部配置更新不再清空链。
+- `free` 模式耗尽所有免费档位时拒绝执行，不回退收费档位或耗尽档位；手动恢复遵守同样限制。
+- 配置持久化成功后才修改内存；允许保存空链；跨站写接口拒绝。
+- 多 Agent 恢复需要明确选定目标；已启用 `TRANSPORT` 触发器时，`UNKNOWN / terminated` 可被识别为网络中断。
+- 限制：`mode` 仍是 Profile 级设置，而不是每会话独立配置；免费标签由用户手动标记，非计费来源证明。
+- 新增回归测试，离线 98/98 通过；尚未安装到 DSH 进行实机验收。
+
+
 面向 DSH 0.2.2-rc.3 的会话级模型故障转移插件。内置重试链放弃后，若错误符合触发条件，插件把当前智能体切到故障转移链的下一档，并排入一个新的重试轮次让会话继续。它只改当前会话的模型选择，不改全局默认模型。
 
 **新版以「设置页」为主操作界面**：在设置页勾选、排序所有已连接 provider 的模型，组成唯一一条有序故障转移链；保存即时生效，无需手写 YAML。纯 YAML 工作流仍保留，但不再是主路径。
@@ -8,7 +18,7 @@
 
 ## Overview / 工作原理与运行时限制
 
-- 默认链：`workbuddy/hy4free` → `workbuddy/hy3` → `workbuddy/hy4std`（保守默认，同一 provider）。
+- 当前默认故障转移链为空；在设置页明确选择并排序实际可用的模型后才允许自动切换，不会猜测模型。
 - 触发码见下节。插件在 `agent/request-error` 瀑布链中先 `next()`；只有整条链放弃且失败符合条件时，才在智能体空闲后选下一档，并以空的 `retry` 消息排入新轮次。绝不吞掉失败，也不在瀑布内切模型。
 - **已核验的运行时限制：切换只对下一步 / 新的一轮生效，不会重发当前这一步的同一请求。** 循环在每步开始时冻结 `decision.selection`（`dsh-agent-loop/src/agent.ts:451`），步内重试复用它（`dsh-agent-loop/src/agent.ts:641-645`）；`agent.model.select()` 写入持久化会话级选择，供后续轮次读取。
 - **`QUOTA` 被 DSH 内置「继续 / Continue」按钮排除**（`dsh-api-session-controller/src/continuation.ts:9-11`），因此本插件自行用 `source: { kind: 'retry' }`、空 `content` 的消息调用 `agent.followup()` 驱动续跑。
@@ -100,8 +110,8 @@ provider 必须已由相应连接插件在 DSH 注册、模型在其目录中可
 
 已在 `<profile>` 作为 `file:` bundle 安装、并带 `cordis.patch.yml` 中 id 为 `dsh-model-failover` 的 `config` 覆盖条目的 v0.1.0，升级时：
 
-1. **现有 3-model 链保留为默认**：`workbuddy/hy4free` → `workbuddy/hy3` → `workbuddy/hy4std` 继续作为 `priority` 的默认值，行为不中断。
-2. **其它已连接模型默认未勾选**：目录里会列出全部 provider/model，但只有原链中的三项进入 `priority`，其余均不勾选、**永不使用**，需要时再手动勾选并排序。
+1. **当前版本默认链为空**：升级会尽量保留你已保存的 `priority`，但新安装必须在设置页选择真实存在的模型，不能依靠已过时的硬编码 WorkBuddy 模型名称。
+2. **全部接入模型默认不自动参与**：目录会展示实际可用模型，只有被明确加入 `priority` 的档位才可能进入自动切换。
 3. **不需要手改 YAML**：设置页保存会自己更新 `cordis.patch.yml` 并触发 HMR；旧的手写 `config` 覆盖条目可被设置页接管，无需手工迁移字段。
 4. **旧纯 YAML 工作流仍可用但不再是主路径**：`rules.yaml` / `config.example.yml` 继续作为离线模板，可把值同步进 `<profile>/cordis.patch.yml` 的 `config:` 覆盖条目；字段与设置页完全一致。纯 YAML 方式不经过 HMR，改完后**需完整重启 Host** 才能确认所有智能体使用同一份规则。
 5. 新增字段（`maxSwitchesPerSession`、`cooldownMs`、`switchLog`、`switchLogLimit`）未显式配置时走上表默认值；旧配置里没有它们也不会报错。
@@ -112,7 +122,7 @@ provider 必须已由相应连接插件在 DSH 注册、模型在其目录中可
 
 示例中的 `<profile>` 指目标 profile 目录（例如 `<profile>`）。安装这个包**不会自动修改正在使用的 profile**，以下步骤需手动完成。
 
-1. **`file:` bundle**：把 `dsh-model-failover` 加入 `<profile>/package.json` 的 `dependencies`，指向本地目录（例如 `"dsh-model-failover": "file:D:/Agent/DSH"`），并在 `<profile>` 目录用 DSH 自带的 Node/pnpm 执行 `pnpm install --no-frozen-lockfile`；同时把 `dsh-model-failover` 加入 `dsh.profile.bundles` 列表。也可用 DSH 插件管理器把包放进 profile，但仍需第 2 步。
+1. **`file:` bundle**：把 `dsh-model-failover` 加入 `<profile>/package.json` 的 `dependencies`，指向本地目录（例如 `"dsh-model-failover": "file:<repository-root>"`），并在 `<profile>` 目录用 DSH 自带的 Node/pnpm 执行 `pnpm install --no-frozen-lockfile`；同时把 `dsh-model-failover` 加入 `dsh.profile.bundles` 列表。也可用 DSH 插件管理器把包放进 profile，但仍需第 2 步。
 2. **cordis patch insert**：在 `<profile>/cordis.patch.yml` 这个顶层 YAML 补丁数组中追加一条 insert 记录，保留已有条目（形状见包内 `cordis.patch.yml:3-5`）：
 
 ```yaml
@@ -127,7 +137,7 @@ provider 必须已由相应连接插件在 DSH 注册、模型在其目录中可
 
 ## Update / 更新现有 live install
 
-对已安装的 `file:D:/Agent/DSH` 这类本地目录安装：
+对已安装的 `file:<repository-root>` 这类本地目录安装：
 
 1. **同步文件**：把新版本文件（含 `lib/client.js`、`lib/index.js`、`package.json` 中新增的 `exports['./client']` 与 `dsh.client` 声明）放到 `file:` 指向的目录；`file:` 安装通常直接指向源目录，写入即完成同步。若用的是 tarball / 复制式 `file:` 包，需重新安装或替换包内容，并用 `pnpm install --no-frozen-lockfile` 刷新。
 2. **首次新增客户端入口需完整重启 Host**：`dsh.client` 与 bundle 清单在启动时读取；重启后设置页 section 才会注册。
